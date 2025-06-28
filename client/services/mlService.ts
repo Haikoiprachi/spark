@@ -156,10 +156,11 @@ export class MLVoiceService {
 
       // Try different HuggingFace Spaces endpoints
       const endpoints = [
-        `${ML_API_URL}/predict`,
         `${ML_API_URL}/api/predict`,
-        `${ML_API_URL}/gradio_api/predict`,
+        `${ML_API_URL}/predict`,
+        `${ML_API_URL}/gradio_api/call/predict`,
         `${ML_API_URL}/run/predict`,
+        `${ML_API_URL}/call/predict`,
         `${ML_API_URL}`,
       ];
 
