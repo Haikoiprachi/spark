@@ -336,6 +336,41 @@ export class MLVoiceService {
       isProcessing: this.audioRecorder.isProcessing,
     };
   }
+
+  // Test API connectivity
+  async testAPIConnection(): Promise<{ success: boolean; message: string }> {
+    try {
+      console.log("🔌 Testing API connectivity...");
+
+      // Simple GET request to check if the space is alive
+      const response = await fetch(ML_API_URL, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${ACCESS_TOKEN}`,
+        },
+      });
+
+      console.log("📡 API connectivity test:", response.status);
+
+      if (response.status === 200 || response.status === 405) {
+        // 405 Method Not Allowed is okay - means the endpoint exists
+        return {
+          success: true,
+          message: `API is reachable (status: ${response.status})`,
+        };
+      } else {
+        return {
+          success: false,
+          message: `API returned status: ${response.status}`,
+        };
+      }
+    } catch (error) {
+      return {
+        success: false,
+        message: `Connection failed: ${error}`,
+      };
+    }
+  }
 }
 
 export const mlVoiceService = MLVoiceService.getInstance();
