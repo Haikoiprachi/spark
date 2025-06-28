@@ -49,6 +49,10 @@ export default function SOS() {
     success: boolean;
     message: string;
   } | null>(null);
+  const [isLiveTesting, setIsLiveTesting] = useState(false);
+  const [liveTestResults, setLiveTestResults] = useState<VoiceAnalysisResult[]>(
+    [],
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -149,6 +153,59 @@ export default function SOS() {
       description: result.message,
       variant: result.success ? "default" : "destructive",
     });
+  };
+
+  const startLiveVoiceTesting = async () => {
+    try {
+      setLiveTestResults([]);
+      const success =
+        await mlVoiceService.startMonitoring(handleLiveTestResult);
+
+      if (success) {
+        setIsLiveTesting(true);
+        toast({
+          title: "🎤 Live Voice Testing Started",
+          description: "Speak into your microphone to test ML detection",
+        });
+      } else {
+        toast({
+          title: "Microphone Access Required",
+          description: "Please allow microphone access for live testing",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Live Testing Failed",
+        description: "Unable to start live voice testing",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const stopLiveVoiceTesting = () => {
+    mlVoiceService.stopMonitoring();
+    setIsLiveTesting(false);
+    toast({
+      title: "🔇 Live Voice Testing Stopped",
+      description: "Voice testing has been disabled",
+    });
+  };
+
+  const handleLiveTestResult = async (result: VoiceAnalysisResult) => {
+    // Add to test results (keep last 5)
+    setLiveTestResults((prev) => [result, ...prev.slice(0, 4)]);
+
+    // Don't trigger actual SOS during testing
+    console.log("🧪 Live test result:", result);
+
+    if (result.isDistress) {
+      toast({
+        title: "⚠️ Distress Detected in Test",
+        description: `Confidence: ${Math.round(result.confidence * 100)}% (This is just a test - no SOS sent)`,
+        variant: "destructive",
+      });
+    }
   };
 
   const startVoiceMonitoring = async () => {
@@ -464,6 +521,118 @@ export default function SOS() {
                   <Upload className="h-4 w-4 mr-2" />
                   Choose Audio File to Test
                 </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Live Voice Testing */}
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Mic className="h-5 w-5" />
+                Live Voice Testing
+              </CardTitle>
+              <CardDescription>
+                Test your ML model with live voice input from your microphone
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="flex items-center gap-4">
+                  <Button
+                    onClick={
+                      isLiveTesting
+                        ? stopLiveVoiceTesting
+                        : startLiveVoiceTesting
+                    }
+                    variant={isLiveTesting ? "destructive" : "default"}
+                    disabled={isTesting}
+                  >
+                    {isLiveTesting ? (
+                      <>
+                        <MicOff className="h-4 w-4 mr-2" />
+                        Stop Live Testing
+                      </>
+                    ) : (
+                      <>
+                        <Mic className="h-4 w-4 mr-2" />
+                        Start Live Testing
+                      </>
+                    )}
+                  </Button>
+
+                  {isLiveTesting && (
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
+                      <span className="text-sm font-medium">
+                        Recording & Analyzing...
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {isLiveTesting && (
+                  <div className="bg-blue-50 dark:bg-blue-950/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Activity className="h-4 w-4 text-blue-600" />
+                      <span className="font-medium text-blue-900 dark:text-blue-100">
+                        Live Testing Active
+                      </span>
+                    </div>
+                    <p className="text-sm text-blue-800 dark:text-blue-200">
+                      Speak normally into your microphone. The ML model will
+                      analyze your voice every 3 seconds. This is for testing
+                      only - no actual SOS alerts will be sent.
+                    </p>
+                  </div>
+                )}
+
+                {liveTestResults.length > 0 && (
+                  <div className="space-y-2">
+                    <h4 className="font-semibold">Recent Live Test Results:</h4>
+                    <div className="max-h-40 overflow-y-auto space-y-2">
+                      {liveTestResults.map((result, index) => (
+                        <div
+                          key={index}
+                          className="bg-muted p-3 rounded-lg text-sm"
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <Badge
+                              variant={
+                                result.isDistress ? "destructive" : "default"
+                              }
+                            >
+                              {result.isDistress ? "DISTRESS" : "Normal"}
+                            </Badge>
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(result.timestamp).toLocaleTimeString()}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span>
+                              Confidence: {Math.round(result.confidence * 100)}%
+                            </span>
+                            {result.message && (
+                              <span className="text-muted-foreground truncate ml-2">
+                                {result.message}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {!isLiveTesting && liveTestResults.length === 0 && (
+                  <div className="text-center py-6 text-muted-foreground">
+                    <Mic className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p>
+                      Click "Start Live Testing" to test voice detection in
+                      real-time
+                    </p>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
