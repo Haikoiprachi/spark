@@ -167,32 +167,71 @@ export class MLVoiceService {
       let response: Response | null = null;
       let lastError = "";
 
-      for (const endpoint of endpoints) {
-        try {
-          console.log(`🔗 Trying endpoint: ${endpoint}`);
+      // First try Gradio API format (most common for HF Spaces)
+      try {
+        console.log("🔗 Trying Gradio API format...");
 
-          response = await fetch(endpoint, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${ACCESS_TOKEN}`,
-            },
-            body: formData,
-          });
+        // Convert audio to base64 for Gradio API
+        const arrayBuffer = await audioBlob.arrayBuffer();
+        const base64Audio = btoa(
+          String.fromCharCode(...new Uint8Array(arrayBuffer)),
+        );
 
-          console.log(`📡 Response from ${endpoint}:`, response.status);
+        const gradioPayload = {
+          data: [base64Audio],
+          fn_index: 0,
+        };
 
-          if (response.ok) {
-            break; // Success, stop trying other endpoints
-          } else {
-            const errorText = await response.text();
-            lastError = `${response.status} - ${errorText}`;
-            console.log(`❌ Failed ${endpoint}:`, lastError);
-            response = null; // Reset for next attempt
-          }
-        } catch (error) {
-          console.log(`❌ Network error for ${endpoint}:`, error);
-          lastError = String(error);
+        response = await fetch(`${ML_API_URL}/api/predict`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${ACCESS_TOKEN}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(gradioPayload),
+        });
+
+        if (response.ok) {
+          console.log("✅ Gradio API format successful");
+        } else {
+          const errorText = await response.text();
+          console.log("❌ Gradio API failed:", response.status, errorText);
           response = null;
+        }
+      } catch (error) {
+        console.log("❌ Gradio API error:", error);
+        response = null;
+      }
+
+      // If Gradio failed, try other endpoints with FormData
+      if (!response) {
+        for (const endpoint of endpoints) {
+          try {
+            console.log(`🔗 Trying endpoint: ${endpoint}`);
+
+            response = await fetch(endpoint, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${ACCESS_TOKEN}`,
+              },
+              body: formData,
+            });
+
+            console.log(`📡 Response from ${endpoint}:`, response.status);
+
+            if (response.ok) {
+              break; // Success, stop trying other endpoints
+            } else {
+              const errorText = await response.text();
+              lastError = `${response.status} - ${errorText}`;
+              console.log(`❌ Failed ${endpoint}:`, lastError);
+              response = null; // Reset for next attempt
+            }
+          } catch (error) {
+            console.log(`❌ Network error for ${endpoint}:`, error);
+            lastError = String(error);
+            response = null;
+          }
         }
       }
 
