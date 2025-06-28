@@ -45,6 +45,10 @@ export default function SOS() {
     null,
   );
   const [isTesting, setIsTesting] = useState(false);
+  const [apiStatus, setApiStatus] = useState<{
+    success: boolean;
+    message: string;
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -134,6 +138,17 @@ export default function SOS() {
     } finally {
       setIsTesting(false);
     }
+  };
+
+  const testAPIConnection = async () => {
+    const result = await mlVoiceService.testAPIConnection();
+    setApiStatus(result);
+
+    toast({
+      title: result.success ? "✅ API Connected" : "❌ API Connection Failed",
+      description: result.message,
+      variant: result.success ? "default" : "destructive",
+    });
   };
 
   const startVoiceMonitoring = async () => {
@@ -356,6 +371,32 @@ export default function SOS() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
+                {/* API Connection Test */}
+                <div className="bg-muted/50 p-3 rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-medium">API Connection</span>
+                    <Button
+                      onClick={testAPIConnection}
+                      variant="outline"
+                      size="sm"
+                    >
+                      Test Connection
+                    </Button>
+                  </div>
+                  {apiStatus && (
+                    <div className="text-sm">
+                      <Badge
+                        variant={apiStatus.success ? "default" : "destructive"}
+                      >
+                        {apiStatus.success ? "Connected" : "Failed"}
+                      </Badge>
+                      <p className="mt-1 text-muted-foreground">
+                        {apiStatus.message}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
                 <div>
                   <Label htmlFor="audio-test">Upload Audio File</Label>
                   <Input
