@@ -249,19 +249,61 @@ export default function SOS() {
   };
 
   const handleVoiceDistress = async (result: VoiceAnalysisResult) => {
+    console.log("🔴 VOICE DISTRESS HANDLER CALLED:", result);
     setVoiceStatus((prev) => ({ ...prev, lastAnalysis: result }));
 
-    if (result.isDistress && result.confidence > 0.7) {
-      // Auto-trigger SOS alert
-      const alert = await sosService.sendSOSAlert("auto", result.confidence);
+    // Log all ML results for debugging
+    console.log(
+      `📊 ML Analysis: ${result.isDistress ? "DISTRESS" : "NORMAL"} - Confidence: ${Math.round(result.confidence * 100)}%`,
+    );
 
-      setRecentAlerts((prev) => [alert, ...prev.slice(0, 2)]);
+    // Check if we should trigger SOS (configurable threshold)
+    const distressThreshold = 0.7; // You can adjust this
+    const shouldTriggerSOS =
+      result.isDistress && result.confidence > distressThreshold;
 
-      toast({
-        title: "🚨 Distress Detected!",
-        description: `Auto SOS triggered (${Math.round(result.confidence * 100)}% confidence)`,
-        variant: "destructive",
-      });
+    if (shouldTriggerSOS) {
+      console.log("🚨 TRIGGERING AUTO SOS ALERT!");
+
+      try {
+        // Auto-trigger SOS alert
+        const alert = await sosService.sendSOSAlert("auto", result.confidence);
+
+        setRecentAlerts((prev) => [alert, ...prev.slice(0, 2)]);
+
+        toast({
+          title: "🚨 DISTRESS DETECTED - SOS SENT!",
+          description: `Emergency contacts notified (${Math.round(result.confidence * 100)}% confidence)`,
+          variant: "destructive",
+        });
+
+        // Visual/audio alert for user
+        if ("vibrate" in navigator) {
+          navigator.vibrate([500, 200, 500, 200, 500]); // Vibration pattern
+        }
+
+        console.log("✅ Auto SOS alert sent successfully:", alert);
+      } catch (error) {
+        console.error("❌ Failed to send auto SOS alert:", error);
+
+        toast({
+          title: "⚠️ SOS Alert Failed",
+          description:
+            "Distress detected but alert failed to send. Try manual SOS.",
+          variant: "destructive",
+        });
+      }
+    } else {
+      // Log non-triggering results for debugging
+      if (result.isDistress) {
+        console.log(
+          `⚠️ Distress detected but confidence too low: ${Math.round(result.confidence * 100)}% (threshold: ${Math.round(distressThreshold * 100)}%)`,
+        );
+      } else {
+        console.log(
+          `✅ Normal voice detected: ${Math.round(result.confidence * 100)}% confidence`,
+        );
+      }
     }
   };
 
