@@ -154,22 +154,50 @@ export class MLVoiceService {
       const formData = new FormData();
       formData.append("audio", audioBlob, "audio.webm");
 
-      // Try the HuggingFace Spaces endpoint
-      const response = await fetch(`${ML_API_URL}/predict`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${ACCESS_TOKEN}`,
-        },
-        body: formData,
-      });
+      // Try different HuggingFace Spaces endpoints
+      const endpoints = [
+        `${ML_API_URL}/predict`,
+        `${ML_API_URL}/api/predict`,
+        `${ML_API_URL}/gradio_api/predict`,
+        `${ML_API_URL}/run/predict`,
+        `${ML_API_URL}`,
+      ];
 
-      console.log("📡 ML API Response Status:", response.status);
+      let response: Response | null = null;
+      let lastError = "";
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("ML API Error:", errorText);
+      for (const endpoint of endpoints) {
+        try {
+          console.log(`🔗 Trying endpoint: ${endpoint}`);
+
+          response = await fetch(endpoint, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${ACCESS_TOKEN}`,
+            },
+            body: formData,
+          });
+
+          console.log(`📡 Response from ${endpoint}:`, response.status);
+
+          if (response.ok) {
+            break; // Success, stop trying other endpoints
+          } else {
+            const errorText = await response.text();
+            lastError = `${response.status} - ${errorText}`;
+            console.log(`❌ Failed ${endpoint}:`, lastError);
+            response = null; // Reset for next attempt
+          }
+        } catch (error) {
+          console.log(`❌ Network error for ${endpoint}:`, error);
+          lastError = String(error);
+          response = null;
+        }
+      }
+
+      if (!response || !response.ok) {
         throw new Error(
-          `ML API request failed: ${response.status} - ${errorText}`,
+          `All ML API endpoints failed. Last error: ${lastError}`,
         );
       }
 
