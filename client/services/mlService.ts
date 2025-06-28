@@ -1,0 +1,223 @@
+// ML Service for Voice Distress Detection
+const ML_API_URL = "https://mourakshi123-voicing-api.hf.space";
+const ACCESS_TOKEN = "hf_NDwsTizlYbJcNbBtqBoTMoOCmFJLdhZpj";
+
+export interface VoiceAnalysisResult {
+  isDistress: boolean;
+  confidence: number;
+  timestamp: string;
+  message?: string;
+}
+
+export interface AudioRecorderState {
+  isRecording: boolean;
+  isProcessing: boolean;
+  mediaRecorder: MediaRecorder | null;
+  stream: MediaStream | null;
+}
+
+export class MLVoiceService {
+  private static instance: MLVoiceService;
+  private audioRecorder: AudioRecorderState = {
+    isRecording: false,
+    isProcessing: false,
+    mediaRecorder: null,
+    stream: null,
+  };
+
+  public static getInstance(): MLVoiceService {
+    if (!MLVoiceService.instance) {
+      MLVoiceService.instance = new MLVoiceService();
+    }
+    return MLVoiceService.instance;
+  }
+
+  // Initialize audio recording
+  async initializeAudio(): Promise<boolean> {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          sampleRate: 16000,
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+        },
+      });
+
+      this.audioRecorder.stream = stream;
+      return true;
+    } catch (error) {
+      console.error("Error accessing microphone:", error);
+      return false;
+    }
+  }
+
+  // Start continuous monitoring
+  async startMonitoring(
+    onDistressDetected: (result: VoiceAnalysisResult) => void,
+  ): Promise<boolean> {
+    if (!this.audioRecorder.stream) {
+      const initialized = await this.initializeAudio();
+      if (!initialized) return false;
+    }
+
+    try {
+      const mediaRecorder = new MediaRecorder(this.audioRecorder.stream!, {
+        mimeType: "audio/webm;codecs=opus",
+      });
+
+      let audioChunks: Blob[] = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunks.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        if (audioChunks.length > 0) {
+          const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
+          audioChunks = [];
+
+          // Process the audio chunk
+          const result = await this.analyzeAudio(audioBlob);
+          if (result) {
+            onDistressDetected(result);
+          }
+        }
+      };
+
+      this.audioRecorder.mediaRecorder = mediaRecorder;
+      this.audioRecorder.isRecording = true;
+
+      // Record in 3-second chunks for real-time analysis
+      mediaRecorder.start();
+      this.scheduleNextRecording();
+
+      return true;
+    } catch (error) {
+      console.error("Error starting voice monitoring:", error);
+      return false;
+    }
+  }
+
+  // Schedule continuous recording in chunks
+  private scheduleNextRecording(): void {
+    if (!this.audioRecorder.isRecording || !this.audioRecorder.mediaRecorder)
+      return;
+
+    setTimeout(() => {
+      if (this.audioRecorder.mediaRecorder && this.audioRecorder.isRecording) {
+        this.audioRecorder.mediaRecorder.stop();
+
+        // Start next recording chunk
+        setTimeout(() => {
+          if (
+            this.audioRecorder.mediaRecorder &&
+            this.audioRecorder.isRecording
+          ) {
+            this.audioRecorder.mediaRecorder.start();
+            this.scheduleNextRecording();
+          }
+        }, 100);
+      }
+    }, 3000); // 3-second chunks
+  }
+
+  // Stop monitoring
+  stopMonitoring(): void {
+    this.audioRecorder.isRecording = false;
+
+    if (this.audioRecorder.mediaRecorder) {
+      this.audioRecorder.mediaRecorder.stop();
+      this.audioRecorder.mediaRecorder = null;
+    }
+
+    if (this.audioRecorder.stream) {
+      this.audioRecorder.stream.getTracks().forEach((track) => track.stop());
+      this.audioRecorder.stream = null;
+    }
+  }
+
+  // Analyze audio using the ML model
+  private async analyzeAudio(
+    audioBlob: Blob,
+  ): Promise<VoiceAnalysisResult | null> {
+    if (this.audioRecorder.isProcessing) return null;
+
+    this.audioRecorder.isProcessing = true;
+
+    try {
+      // Convert audio blob to format expected by the ML model
+      const formData = new FormData();
+      formData.append("file", audioBlob, "audio.webm");
+
+      const response = await fetch(`${ML_API_URL}/api/predict`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${ACCESS_TOKEN}`,
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(`ML API request failed: ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      // Process the ML model response
+      const isDistress = this.interpretMLResult(result);
+      const confidence = result.confidence || 0;
+
+      return {
+        isDistress,
+        confidence,
+        timestamp: new Date().toISOString(),
+        message: result.message || "Voice analysis completed",
+      };
+    } catch (error) {
+      console.error("Error analyzing audio:", error);
+      return null;
+    } finally {
+      this.audioRecorder.isProcessing = false;
+    }
+  }
+
+  // Interpret ML model result
+  private interpretMLResult(result: any): boolean {
+    // Adjust this logic based on your ML model's response format
+    if (result.prediction) {
+      return (
+        result.prediction.toLowerCase().includes("distress") ||
+        result.prediction.toLowerCase().includes("danger") ||
+        result.prediction.toLowerCase().includes("help")
+      );
+    }
+
+    if (result.confidence) {
+      return result.confidence > 0.7; // Threshold for distress detection
+    }
+
+    if (result.label) {
+      return result.label.toLowerCase().includes("distress");
+    }
+
+    return false;
+  }
+
+  // Manual analysis for testing
+  async analyzeFile(file: File): Promise<VoiceAnalysisResult | null> {
+    return this.analyzeAudio(file);
+  }
+
+  // Get current monitoring status
+  getStatus(): { isRecording: boolean; isProcessing: boolean } {
+    return {
+      isRecording: this.audioRecorder.isRecording,
+      isProcessing: this.audioRecorder.isProcessing,
+    };
+  }
+}
+
+export const mlVoiceService = MLVoiceService.getInstance();
