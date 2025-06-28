@@ -191,51 +191,54 @@ export class MLVoiceService {
       let result: any = null;
       let lastError = "";
 
-      // Method 1: Try HuggingFace Inference API (most reliable)
+      // Method 1: Try HuggingFace Space /run/predict endpoint (correct format)
       try {
-        console.log("🔗 Method 1: Trying HuggingFace Inference API...");
+        console.log("🔗 Method 1: Trying HuggingFace Space /run/predict...");
 
         const base64Audio = await this.audioToBase64(audioBlob);
 
-        const response = await fetch(
-          `https://api-inference.huggingface.co/models/mourakshi123/voicing-api`,
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${ACCESS_TOKEN}`,
-            },
-            body: audioBlob, // Send raw audio data
+        const response = await fetch(`${ML_API_URL}/run/predict`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${ACCESS_TOKEN}`,
           },
-        );
+          body: JSON.stringify({
+            data: [base64Audio],
+          }),
+        });
 
-        console.log("📡 Inference API status:", response.status);
+        console.log("📡 Space /run/predict status:", response.status);
 
         if (response.ok) {
           try {
             result = await response.json();
-            console.log("✅ Inference API successful:", result);
+            console.log("✅ Space /run/predict successful:", result);
           } catch (jsonError) {
             console.log("❌ JSON parse error:", jsonError);
-            lastError = "Invalid JSON response from Inference API";
+            lastError = "Invalid JSON response from Space";
           }
         } else {
-          console.log("❌ Inference API failed with status:", response.status);
-          lastError = `Inference API failed: ${response.status}`;
+          console.log(
+            "❌ Space /run/predict failed with status:",
+            response.status,
+          );
+          lastError = `Space /run/predict failed: ${response.status}`;
         }
       } catch (error) {
-        console.log("❌ Inference API error:", error);
-        lastError = `Inference API error: ${error}`;
+        console.log("❌ Space /run/predict error:", error);
+        lastError = `Space /run/predict error: ${error}`;
       }
 
-      // Method 2: Try Space with FormData (if inference failed)
+      // Method 2: Try Space with different data format
       if (!result) {
         try {
-          console.log("🔗 Method 2: Trying Space with FormData...");
+          console.log("🔗 Method 2: Trying Space with file upload format...");
 
           const formData = new FormData();
           formData.append("file", audioBlob, "audio.webm");
 
-          const response = await fetch(`${ML_API_URL}/api/predict`, {
+          const response = await fetch(`${ML_API_URL}/run/predict`, {
             method: "POST",
             headers: {
               Authorization: `Bearer ${ACCESS_TOKEN}`,
@@ -243,26 +246,26 @@ export class MLVoiceService {
             body: formData,
           });
 
-          console.log("📡 Space FormData status:", response.status);
+          console.log("📡 Space file upload status:", response.status);
 
           if (response.ok) {
             try {
               result = await response.json();
-              console.log("✅ Space FormData successful:", result);
+              console.log("✅ Space file upload successful:", result);
             } catch (jsonError) {
               console.log("❌ JSON parse error:", jsonError);
               lastError = "Invalid JSON response from Space";
             }
           } else {
             console.log(
-              "❌ Space FormData failed with status:",
+              "❌ Space file upload failed with status:",
               response.status,
             );
-            lastError = `Space API failed: ${response.status}`;
+            lastError = `Space file upload failed: ${response.status}`;
           }
         } catch (error) {
-          console.log("❌ Space FormData error:", error);
-          lastError = `Space FormData error: ${error}`;
+          console.log("❌ Space file upload error:", error);
+          lastError = `Space file upload error: ${error}`;
         }
       }
 
@@ -278,7 +281,7 @@ export class MLVoiceService {
           message: "Demo mode - replace with actual ML model",
         };
 
-        console.log("��️ Using demo response:", result);
+        console.log("⚠️ Using demo response:", result);
       }
 
       if (!result) {
