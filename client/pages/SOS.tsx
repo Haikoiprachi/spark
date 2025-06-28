@@ -750,6 +750,175 @@ export default function SOS() {
           </Card>
         )}
 
+        {/* ML-to-SOS Integration Status */}
+        <Card className="mt-8 max-w-4xl mx-auto">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Zap className="h-5 w-5" />
+              ML-to-SOS Integration Monitor
+            </CardTitle>
+            <CardDescription>
+              Real-time status of how your ML model connects to the emergency
+              system
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* ML Model Status */}
+              <div className="text-center p-4 bg-muted rounded-lg">
+                <div className="flex items-center justify-center mb-2">
+                  {voiceStatus.isRecording ? (
+                    <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                  ) : (
+                    <div className="w-3 h-3 bg-gray-400 rounded-full"></div>
+                  )}
+                  <span className="ml-2 font-medium">ML Model</span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {voiceStatus.isRecording ? "Active & Analyzing" : "Inactive"}
+                </p>
+                {voiceStatus.lastAnalysis && (
+                  <p className="text-xs mt-1">
+                    Last:{" "}
+                    {new Date(
+                      voiceStatus.lastAnalysis.timestamp,
+                    ).toLocaleTimeString()}
+                  </p>
+                )}
+              </div>
+
+              {/* Integration Bridge */}
+              <div className="text-center p-4 bg-muted rounded-lg">
+                <div className="flex items-center justify-center mb-2">
+                  <div
+                    className={`w-3 h-3 rounded-full ${
+                      isMonitoring ? "bg-blue-500 animate-pulse" : "bg-gray-400"
+                    }`}
+                  ></div>
+                  <span className="ml-2 font-medium">Integration</span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {isMonitoring ? "ML ↔ SOS Connected" : "Not Connected"}
+                </p>
+                <p className="text-xs mt-1">Threshold: 70% confidence</p>
+              </div>
+
+              {/* SOS System Status */}
+              <div className="text-center p-4 bg-muted rounded-lg">
+                <div className="flex items-center justify-center mb-2">
+                  <div
+                    className={`w-3 h-3 rounded-full ${
+                      sosService.getEmergencyContacts().length > 0
+                        ? "bg-green-500"
+                        : "bg-red-500"
+                    }`}
+                  ></div>
+                  <span className="ml-2 font-medium">SOS System</span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {sosService.getEmergencyContacts().length} contacts ready
+                </p>
+                <p className="text-xs mt-1">
+                  {sosService.getEmergencyContacts().length === 0
+                    ? "Add contacts first"
+                    : "Ready to send alerts"}
+                </p>
+              </div>
+            </div>
+
+            {/* Integration Flow Diagram */}
+            <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+              <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-3">
+                How ML-to-SOS Integration Works:
+              </h4>
+              <div className="flex items-center justify-between text-sm">
+                <div className="text-center">
+                  <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold mb-1">
+                    1
+                  </div>
+                  <p className="text-blue-800 dark:text-blue-200">
+                    Voice Detected
+                  </p>
+                </div>
+                <div className="text-blue-600">→</div>
+                <div className="text-center">
+                  <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold mb-1">
+                    2
+                  </div>
+                  <p className="text-blue-800 dark:text-blue-200">
+                    ML Analysis
+                  </p>
+                </div>
+                <div className="text-blue-600">→</div>
+                <div className="text-center">
+                  <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold mb-1">
+                    3
+                  </div>
+                  <p className="text-blue-800 dark:text-blue-200">
+                    Distress Check
+                  </p>
+                </div>
+                <div className="text-blue-600">→</div>
+                <div className="text-center">
+                  <div className="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center text-white font-bold mb-1">
+                    4
+                  </div>
+                  <p className="text-blue-800 dark:text-blue-200">Auto SOS</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Last ML Result */}
+            {voiceStatus.lastAnalysis && (
+              <div className="mt-4 p-3 bg-muted rounded-lg">
+                <h4 className="font-medium mb-2">Latest ML Analysis:</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Result:</span>
+                    <Badge
+                      variant={
+                        voiceStatus.lastAnalysis.isDistress
+                          ? "destructive"
+                          : "default"
+                      }
+                      className="ml-2"
+                    >
+                      {voiceStatus.lastAnalysis.isDistress
+                        ? "Distress"
+                        : "Normal"}
+                    </Badge>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Confidence:</span>
+                    <span className="ml-2 font-medium">
+                      {Math.round(voiceStatus.lastAnalysis.confidence * 100)}%
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">
+                      Triggered SOS:
+                    </span>
+                    <span className="ml-2 font-medium">
+                      {voiceStatus.lastAnalysis.isDistress &&
+                      voiceStatus.lastAnalysis.confidence > 0.7
+                        ? "Yes"
+                        : "No"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Time:</span>
+                    <span className="ml-2 font-medium">
+                      {new Date(
+                        voiceStatus.lastAnalysis.timestamp,
+                      ).toLocaleTimeString()}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Emergency Contacts Status */}
         <Card className="mt-8 max-w-2xl mx-auto">
           <CardHeader>
@@ -767,8 +936,8 @@ export default function SOS() {
             </div>
             <p className="text-sm text-muted-foreground mt-2">
               {sosService.getEmergencyContacts().length === 0
-                ? "Add emergency contacts to receive SOS alerts"
-                : "Emergency contacts will be notified when SOS is triggered"}
+                ? "⚠️ Add emergency contacts to receive SOS alerts from ML detection"
+                : "✅ Emergency contacts will be notified when ML detects distress"}
             </p>
           </CardContent>
         </Card>
