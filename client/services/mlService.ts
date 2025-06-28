@@ -148,11 +148,14 @@ export class MLVoiceService {
     this.audioRecorder.isProcessing = true;
 
     try {
+      console.log("🎤 Sending audio to ML model for analysis...");
+
       // Convert audio blob to format expected by the ML model
       const formData = new FormData();
-      formData.append("file", audioBlob, "audio.webm");
+      formData.append("audio", audioBlob, "audio.webm");
 
-      const response = await fetch(`${ML_API_URL}/api/predict`, {
+      // Try the HuggingFace Spaces endpoint
+      const response = await fetch(`${ML_API_URL}/predict`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${ACCESS_TOKEN}`,
@@ -160,11 +163,18 @@ export class MLVoiceService {
         body: formData,
       });
 
+      console.log("📡 ML API Response Status:", response.status);
+
       if (!response.ok) {
-        throw new Error(`ML API request failed: ${response.status}`);
+        const errorText = await response.text();
+        console.error("ML API Error:", errorText);
+        throw new Error(
+          `ML API request failed: ${response.status} - ${errorText}`,
+        );
       }
 
       const result = await response.json();
+      console.log("🤖 ML Model Result:", result);
 
       // Process the ML model response
       const isDistress = this.interpretMLResult(result);
@@ -186,23 +196,63 @@ export class MLVoiceService {
 
   // Interpret ML model result
   private interpretMLResult(result: any): boolean {
-    // Adjust this logic based on your ML model's response format
-    if (result.prediction) {
-      return (
-        result.prediction.toLowerCase().includes("distress") ||
-        result.prediction.toLowerCase().includes("danger") ||
-        result.prediction.toLowerCase().includes("help")
+    console.log("🔍 Interpreting ML result:", result);
+
+    // Check various possible response formats from HuggingFace models
+    if (result.prediction !== undefined) {
+      const prediction = String(result.prediction).toLowerCase();
+      const isDistress =
+        prediction.includes("distress") ||
+        prediction.includes("danger") ||
+        prediction.includes("help") ||
+        prediction.includes("emergency") ||
+        prediction.includes("panic");
+      console.log("📊 Prediction-based result:", isDistress);
+      return isDistress;
+    }
+
+    if (result.label !== undefined) {
+      const label = String(result.label).toLowerCase();
+      const isDistress =
+        label.includes("distress") ||
+        label.includes("danger") ||
+        label.includes("emergency");
+      console.log("🏷️ Label-based result:", isDistress);
+      return isDistress;
+    }
+
+    if (result.confidence !== undefined) {
+      const isDistress = result.confidence > 0.7; // Threshold for distress detection
+      console.log(
+        "📈 Confidence-based result:",
+        isDistress,
+        "confidence:",
+        result.confidence,
       );
+      return isDistress;
     }
 
-    if (result.confidence) {
-      return result.confidence > 0.7; // Threshold for distress detection
+    // Check if it's an array of predictions (common in HuggingFace)
+    if (Array.isArray(result) && result.length > 0) {
+      const topResult = result[0];
+      if (topResult.label && topResult.score) {
+        const label = String(topResult.label).toLowerCase();
+        const isDistress =
+          (label.includes("distress") ||
+            label.includes("danger") ||
+            label.includes("emergency")) &&
+          topResult.score > 0.7;
+        console.log(
+          "📋 Array-based result:",
+          isDistress,
+          "top result:",
+          topResult,
+        );
+        return isDistress;
+      }
     }
 
-    if (result.label) {
-      return result.label.toLowerCase().includes("distress");
-    }
-
+    console.log("❓ Unknown result format, defaulting to false");
     return false;
   }
 
