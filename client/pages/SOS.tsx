@@ -452,6 +452,14 @@ export default function SOS() {
                       </p>
                     </div>
                   )}
+                  <div className="mt-2 p-2 bg-yellow-50 dark:bg-yellow-950/20 rounded border border-yellow-200 dark:border-yellow-800">
+                    <p className="text-xs text-yellow-800 dark:text-yellow-200">
+                      💡 <strong>Tip:</strong> If API connection fails, the
+                      system will use demo mode for testing the UI. Check
+                      browser console (F12) for detailed API debugging
+                      information.
+                    </p>
+                  </div>
                 </div>
 
                 <div>
