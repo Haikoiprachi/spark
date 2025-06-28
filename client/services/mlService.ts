@@ -2,6 +2,9 @@
 const ML_API_URL = "https://mourakshi123-voicing-api.hf.space";
 const ACCESS_TOKEN = "hf_NDwsTizlYbJcNbBtqBoTMoOCmFJLdhZpj";
 
+// Demo mode for testing (set to true to test UI without API calls)
+const DEMO_MODE = false;
+
 export interface VoiceAnalysisResult {
   isDistress: boolean;
   confidence: number;
@@ -150,6 +153,27 @@ export class MLVoiceService {
     try {
       console.log("🎤 Sending audio to ML model for analysis...");
 
+      // Demo mode - skip API calls and return mock data
+      if (DEMO_MODE) {
+        console.log("🎭 Demo mode enabled - returning mock result");
+        const mockResult = {
+          prediction: Math.random() > 0.9 ? "distress" : "normal",
+          confidence: Math.random(),
+          label: Math.random() > 0.9 ? "distress_detected" : "normal_speech",
+          message: "Demo mode - using simulated ML response",
+        };
+
+        const isDistress = this.interpretMLResult(mockResult);
+        const confidence = mockResult.confidence || 0;
+
+        return {
+          isDistress,
+          confidence,
+          timestamp: new Date().toISOString(),
+          message: mockResult.message,
+        };
+      }
+
       // Convert audio blob to format expected by the ML model
       const formData = new FormData();
       formData.append("audio", audioBlob, "audio.webm");
@@ -254,7 +278,7 @@ export class MLVoiceService {
           message: "Demo mode - replace with actual ML model",
         };
 
-        console.log("⚠️ Using demo response:", result);
+        console.log("��️ Using demo response:", result);
       }
 
       if (!result) {
