@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Navbar from "@/components/Navbar";
 import {
   Card,
@@ -9,6 +9,8 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   AlertTriangle,
   Shield,
@@ -19,6 +21,8 @@ import {
   Phone,
   MapPin,
   Zap,
+  Upload,
+  TestTube,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { mlVoiceService, VoiceAnalysisResult } from "@/services/mlService";
@@ -37,6 +41,11 @@ export default function SOS() {
     isProcessing: false,
   });
   const [recentAlerts, setRecentAlerts] = useState<SOSAlert[]>([]);
+  const [testResult, setTestResult] = useState<VoiceAnalysisResult | null>(
+    null,
+  );
+  const [isTesting, setIsTesting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     // Load recent alerts on mount
@@ -93,6 +102,37 @@ export default function SOS() {
       });
     } finally {
       setTimeout(() => setIsActivating(false), 2000);
+    }
+  };
+
+  const handleTestMLModel = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsTesting(true);
+    setTestResult(null);
+
+    try {
+      const result = await mlVoiceService.analyzeFile(file);
+      setTestResult(result);
+
+      if (result) {
+        toast({
+          title: "🧪 ML Test Complete",
+          description: `Result: ${result.isDistress ? "DISTRESS DETECTED" : "No distress"} (${Math.round(result.confidence * 100)}% confidence)`,
+          variant: result.isDistress ? "destructive" : "default",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Test Failed",
+        description: "Error testing ML model with audio file",
+        variant: "destructive",
+      });
+    } finally {
+      setIsTesting(false);
     }
   };
 
@@ -298,6 +338,90 @@ export default function SOS() {
                   className="w-full"
                 >
                   {isMonitoring ? "Stop Monitoring" : "Start Monitoring"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* ML Model Testing */}
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TestTube className="h-5 w-5" />
+                Test ML Model
+              </CardTitle>
+              <CardDescription>
+                Upload an audio file to test your ML model's distress detection
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="audio-test">Upload Audio File</Label>
+                  <Input
+                    id="audio-test"
+                    type="file"
+                    accept="audio/*"
+                    onChange={handleTestMLModel}
+                    disabled={isTesting}
+                    ref={fileInputRef}
+                    className="mt-2"
+                  />
+                </div>
+
+                {isTesting && (
+                  <div className="flex items-center gap-2 text-blue-600">
+                    <Clock className="h-4 w-4 animate-spin" />
+                    <span>Testing audio with ML model...</span>
+                  </div>
+                )}
+
+                {testResult && (
+                  <div className="bg-muted p-4 rounded-lg">
+                    <h4 className="font-semibold mb-2">Test Result:</h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span>Status:</span>
+                        <Badge
+                          variant={
+                            testResult.isDistress ? "destructive" : "default"
+                          }
+                        >
+                          {testResult.isDistress
+                            ? "DISTRESS DETECTED"
+                            : "No Distress"}
+                        </Badge>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Confidence:</span>
+                        <span>{Math.round(testResult.confidence * 100)}%</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Timestamp:</span>
+                        <span>
+                          {new Date(testResult.timestamp).toLocaleTimeString()}
+                        </span>
+                      </div>
+                      {testResult.message && (
+                        <div className="flex justify-between">
+                          <span>Message:</span>
+                          <span className="text-right">
+                            {testResult.message}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <Button
+                  onClick={() => fileInputRef.current?.click()}
+                  variant="outline"
+                  className="w-full"
+                  disabled={isTesting}
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  Choose Audio File to Test
                 </Button>
               </div>
             </CardContent>
