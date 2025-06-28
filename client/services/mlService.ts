@@ -164,84 +164,109 @@ export class MLVoiceService {
         `${ML_API_URL}`,
       ];
 
-      let response: Response | null = null;
+      let result: any = null;
       let lastError = "";
 
-      // First try Gradio API format (most common for HF Spaces)
+      // Method 1: Try Gradio Client API format
       try {
-        console.log("🔗 Trying Gradio API format...");
+        console.log("🔗 Method 1: Trying Gradio Client API...");
 
-        // Convert audio to base64 for Gradio API
-        const arrayBuffer = await audioBlob.arrayBuffer();
-        const base64Audio = btoa(
-          String.fromCharCode(...new Uint8Array(arrayBuffer)),
-        );
+        // Convert audio to WAV format for better compatibility
+        const audioData = await this.convertToWav(audioBlob);
 
-        const gradioPayload = {
-          data: [base64Audio],
-          fn_index: 0,
-        };
-
-        response = await fetch(`${ML_API_URL}/api/predict`, {
+        const response = await fetch(`${ML_API_URL}/call/predict`, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${ACCESS_TOKEN}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(gradioPayload),
+          body: JSON.stringify({
+            data: [audioData],
+          }),
         });
 
         if (response.ok) {
-          console.log("✅ Gradio API format successful");
+          const gradioResult = await response.json();
+          console.log("✅ Gradio Client API successful:", gradioResult);
+
+          // Extract data from Gradio response
+          if (gradioResult.data && gradioResult.data.length > 0) {
+            result = gradioResult.data[0];
+          } else {
+            result = gradioResult;
+          }
         } else {
-          const errorText = await response.text();
-          console.log("❌ Gradio API failed:", response.status, errorText);
-          response = null;
+          console.log("❌ Gradio Client API failed:", response.status);
         }
       } catch (error) {
-        console.log("❌ Gradio API error:", error);
-        response = null;
+        console.log("❌ Gradio Client API error:", error);
       }
 
-      // If Gradio failed, try other endpoints with FormData
-      if (!response) {
-        for (const endpoint of endpoints) {
-          try {
-            console.log(`🔗 Trying endpoint: ${endpoint}`);
+      // Method 2: Try direct inference API
+      if (!result) {
+        try {
+          console.log("🔗 Method 2: Trying HuggingFace Inference API...");
 
-            response = await fetch(endpoint, {
+          const response = await fetch(
+            `https://api-inference.huggingface.co/models/mourakshi123/voicing-api`,
+            {
               method: "POST",
               headers: {
                 Authorization: `Bearer ${ACCESS_TOKEN}`,
+                "Content-Type": "application/json",
               },
-              body: formData,
-            });
+              body: JSON.stringify({
+                inputs: await this.audioToBase64(audioBlob),
+              }),
+            },
+          );
 
-            console.log(`📡 Response from ${endpoint}:`, response.status);
-
-            if (response.ok) {
-              break; // Success, stop trying other endpoints
-            } else {
-              const errorText = await response.text();
-              lastError = `${response.status} - ${errorText}`;
-              console.log(`❌ Failed ${endpoint}:`, lastError);
-              response = null; // Reset for next attempt
-            }
-          } catch (error) {
-            console.log(`❌ Network error for ${endpoint}:`, error);
-            lastError = String(error);
-            response = null;
+          if (response.ok) {
+            result = await response.json();
+            console.log("✅ Inference API successful:", result);
+          } else {
+            console.log("❌ Inference API failed:", response.status);
           }
+        } catch (error) {
+          console.log("❌ Inference API error:", error);
         }
       }
 
-      if (!response || !response.ok) {
-        throw new Error(
-          `All ML API endpoints failed. Last error: ${lastError}`,
-        );
+      // Method 3: Try simple POST with binary data
+      if (!result) {
+        try {
+          console.log("🔗 Method 3: Trying simple binary upload...");
+
+          const response = await fetch(`${ML_API_URL}/api/predict`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${ACCESS_TOKEN}`,
+            },
+            body: audioBlob,
+          });
+
+          if (response.ok) {
+            result = await response.json();
+            console.log("✅ Binary upload successful:", result);
+          } else {
+            const responseText = await response.text();
+            console.log(
+              "❌ Binary upload failed:",
+              response.status,
+              responseText,
+            );
+            lastError = `${response.status} - ${responseText}`;
+          }
+        } catch (error) {
+          console.log("❌ Binary upload error:", error);
+          lastError = String(error);
+        }
       }
 
-      const result = await response.json();
+      if (!result) {
+        throw new Error(`All ML API methods failed. Last error: ${lastError}`);
+      }
+
       console.log("🤖 ML Model Result:", result);
 
       // Process the ML model response
@@ -329,6 +354,30 @@ export class MLVoiceService {
     return this.analyzeAudio(file);
   }
 
+  // Convert audio blob to base64
+  private async audioToBase64(audioBlob: Blob): Promise<string> {
+    const arrayBuffer = await audioBlob.arrayBuffer();
+    const uint8Array = new Uint8Array(arrayBuffer);
+    let binary = "";
+    for (let i = 0; i < uint8Array.length; i++) {
+      binary += String.fromCharCode(uint8Array[i]);
+    }
+    return btoa(binary);
+  }
+
+  // Convert audio to WAV format (simplified)
+  private async convertToWav(audioBlob: Blob): Promise<string> {
+    try {
+      // For now, just convert to base64
+      // In a real app, you'd use Web Audio API to convert to WAV
+      const base64 = await this.audioToBase64(audioBlob);
+      return `data:audio/wav;base64,${base64}`;
+    } catch (error) {
+      console.error("Error converting audio:", error);
+      return await this.audioToBase64(audioBlob);
+    }
+  }
+
   // Get current monitoring status
   getStatus(): { isRecording: boolean; isProcessing: boolean } {
     return {
@@ -342,32 +391,51 @@ export class MLVoiceService {
     try {
       console.log("🔌 Testing API connectivity...");
 
-      // Simple GET request to check if the space is alive
-      const response = await fetch(ML_API_URL, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${ACCESS_TOKEN}`,
-        },
-      });
+      // Test multiple endpoints to see which ones are available
+      const testEndpoints = [
+        `${ML_API_URL}`,
+        `${ML_API_URL}/api/predict`,
+        `${ML_API_URL}/call/predict`,
+        `https://api-inference.huggingface.co/models/mourakshi123/voicing-api`,
+      ];
 
-      console.log("📡 API connectivity test:", response.status);
+      const results = [];
 
-      if (response.status === 200 || response.status === 405) {
-        // 405 Method Not Allowed is okay - means the endpoint exists
-        return {
-          success: true,
-          message: `API is reachable (status: ${response.status})`,
-        };
-      } else {
-        return {
-          success: false,
-          message: `API returned status: ${response.status}`,
-        };
+      for (const endpoint of testEndpoints) {
+        try {
+          const response = await fetch(endpoint, {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${ACCESS_TOKEN}`,
+            },
+          });
+
+          results.push(`${endpoint}: ${response.status}`);
+
+          if (
+            response.status === 200 ||
+            response.status === 405 ||
+            response.status === 422
+          ) {
+            // These statuses indicate the endpoint exists
+            return {
+              success: true,
+              message: `API reachable at ${endpoint} (status: ${response.status})`,
+            };
+          }
+        } catch (error) {
+          results.push(`${endpoint}: Error - ${error}`);
+        }
       }
+
+      return {
+        success: false,
+        message: `All endpoints failed. Results: ${results.join(", ")}`,
+      };
     } catch (error) {
       return {
         success: false,
-        message: `Connection failed: ${error}`,
+        message: `Connection test failed: ${error}`,
       };
     }
   }
